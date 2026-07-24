@@ -4,17 +4,24 @@ import HTTP_STATUS from "../../constants/httpStatusCodes.js";
 import Order from "../../models/order.model.js";
 import User from "../../models/user.model.js";
 import Product from "../../models/product.model.js";
+import Notification from "../../models/notification.model.js";
 import { buildDateRangeFilter } from "../../helpers/filter.helper.js";
 import { PAYMENT_STATUS } from "../../constants/paymentStatus.js";
+
+const GROUP_FORMATS = {
+  day: "%Y-%m-%d",
+  month: "%Y-%m",
+};
 
 export const getPlatformDashboard = asyncHandler(async (req, res) => {
   const dateFilter = buildDateRangeFilter(req.query);
   const paidFilter = { paymentStatus: PAYMENT_STATUS.PAID, ...dateFilter };
+  const trendFormat = GROUP_FORMATS[req.query.groupBy] || GROUP_FORMATS.day;
 
-  const [revenueTrend, topProducts, customerGrowth, totalRevenueAgg, totalCustomers] = await Promise.all([
+  const [revenueTrend, topProducts, customerGrowth, totalRevenueAgg, totalCustomers, totalOrders] = await Promise.all([
     Order.aggregate([
       { $match: paidFilter },
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, revenue: { $sum: "$grandTotal" } } },
+      { $group: { _id: { $dateToString: { format: trendFormat, date: "$createdAt" } }, revenue: { $sum: "$grandTotal" } } },
       { $sort: { _id: 1 } },
     ]),
     Order.aggregate([
@@ -29,11 +36,12 @@ export const getPlatformDashboard = asyncHandler(async (req, res) => {
     ]),
     User.aggregate([
       { $match: dateFilter },
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 } } },
+      { $group: { _id: { $dateToString: { format: trendFormat, date: "$createdAt" } }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
     Order.aggregate([{ $match: paidFilter }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
     User.countDocuments({}),
+    Order.countDocuments(dateFilter),
   ]);
 
   const totalProducts = await Product.countDocuments({});
@@ -45,6 +53,7 @@ export const getPlatformDashboard = asyncHandler(async (req, res) => {
         totalRevenue: totalRevenueAgg[0]?.total || 0,
         totalCustomers,
         totalProducts,
+        totalOrders,
         revenueTrend,
         topProducts,
         customerGrowth,
@@ -82,4 +91,12 @@ export const generateReport = asyncHandler(async (req, res) => {
       "Report generated"
     )
   );
+});
+
+export const getSuperAdminNotifications = asyncHandler(async (req, res) => {
+  const notifications = await Notification.find({ recipient: req.superAdmin._id, recipientModel: "SuperAdmin" })
+    .sort({ createdAt: -1 })
+    .limit(30);
+
+  return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, notifications, "Notifications fetched"));
 });

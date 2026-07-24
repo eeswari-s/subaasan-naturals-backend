@@ -36,6 +36,12 @@ import superAdminDashboardRoutes from "./superAdmin/dashboard.routes.js";
 import superAdminBlogRoutes from "./superAdmin/blog.routes.js";
 import superAdminFaqRoutes from "./superAdmin/faq.routes.js";
 import superAdminPlatformSettingsRoutes from "./superAdmin/platformSettings.routes.js";
+import superAdminPaymentConfigRoutes from "./superAdmin/paymentConfig.routes.js";
+import superAdminEmailConfigRoutes from "./superAdmin/emailConfig.routes.js";
+import superAdminPaymentRoutes from "./superAdmin/payment.routes.js";
+import superAdminReportsRoutes from "./superAdmin/reports.routes.js";
+import superAdminProfileRoutes from "./superAdmin/profile.routes.js";
+import superAdminActivityLogRoutes from "./superAdmin/activityLog.routes.js";
 
 const router = Router();
 
@@ -80,5 +86,11 @@ router.use("/super-admin/dashboard", superAdminDashboardRoutes);
 router.use("/blogs", superAdminBlogRoutes);
 router.use("/faqs", superAdminFaqRoutes);
 router.use("/super-admin/platform-settings", superAdminPlatformSettingsRoutes);
+router.use("/super-admin/payment-config", superAdminPaymentConfigRoutes);
+router.use("/super-admin/email-config", superAdminEmailConfigRoutes);
+router.use("/super-admin/payments", superAdminPaymentRoutes);
+router.use("/super-admin/reports", superAdminReportsRoutes);
+router.use("/super-admin/profile", superAdminProfileRoutes);
+router.use("/super-admin/activity-logs", superAdminActivityLogRoutes);
 
 export default router;

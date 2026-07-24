@@ -9,6 +9,7 @@ import RefreshToken from "../../models/refreshToken.model.js";
 import generateOtp from "../../utils/generateOtp.js";
 import { generateTokens, generateAccessToken, hashToken, getTokenExpiryDate, verifyRefreshToken } from "../../utils/generateTokens.js";
 import { sendForgotPasswordEmail } from "../../services/email.service.js";
+import { logActivity } from "../../services/activityLog.service.js";
 import env from "../../config/env.js";
 
 const REFRESH_COOKIE_NAME = "superAdminRefreshToken";
@@ -52,6 +53,13 @@ export const login = asyncHandler(async (req, res) => {
   await superAdmin.save();
 
   const accessToken = await issueSession(res, superAdmin);
+
+  logActivity({
+    actor: superAdmin._id,
+    actorModel: "SuperAdmin",
+    action: "LOGGED_IN",
+    ipAddress: req.ip,
+  }).catch(() => {});
 
   const safeSuperAdmin = superAdmin.toObject();
   delete safeSuperAdmin.password;

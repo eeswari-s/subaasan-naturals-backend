@@ -8,6 +8,7 @@ import Coupon from "../../models/coupon.model.js";
 import calculateOrderTotals from "../../utils/calculateOrderTotals.js";
 import { validateAndCalculateCoupon } from "../../services/order.service.js";
 import { incrementCartCount } from "../../services/product.service.js";
+import { getCheckoutSettings } from "../../services/platformConfig.service.js";
 
 const resolveItemPricing = (product, variantName) => {
   if (variantName) {
@@ -19,8 +20,10 @@ const resolveItemPricing = (product, variantName) => {
 };
 
 const buildCartResponse = async (cart) => {
+  const checkoutSettings = await getCheckoutSettings();
+
   if (!cart || cart.items.length === 0) {
-    return { items: [], coupon: null, ...calculateOrderTotals([], null) };
+    return { items: [], coupon: null, ...calculateOrderTotals([], null, checkoutSettings) };
   }
 
   const productIds = cart.items.map((i) => i.product);
@@ -57,7 +60,8 @@ const buildCartResponse = async (cart) => {
 
   const totals = calculateOrderTotals(
     enrichedItems.map((i) => ({ price: i.price, quantity: i.quantity, freeShipping: i.freeShipping })),
-    coupon ? { type: coupon.type, value: coupon.value, maxDiscount: coupon.maxDiscount } : null
+    coupon ? { type: coupon.type, value: coupon.value, maxDiscount: coupon.maxDiscount } : null,
+    checkoutSettings
   );
 
   return { items: enrichedItems, coupon: coupon ? { code: coupon.code, type: coupon.type, value: coupon.value } : null, ...totals };

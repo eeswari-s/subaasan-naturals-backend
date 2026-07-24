@@ -8,5 +8,6 @@ router.use(superAdminMiddleware);
 
 router.get("/overview", dashboardController.getPlatformDashboard);
 router.get("/report", dashboardController.generateReport);
+router.get("/notifications", dashboardController.getSuperAdminNotifications);
 
 export default router;

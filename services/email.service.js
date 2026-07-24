@@ -1,6 +1,6 @@
 import brevo from "@getbrevo/brevo";
-import apiInstance from "../config/brevo.js";
-import env from "../config/env.js";
+import { createBrevoInstance } from "../config/brevo.js";
+import { getEmailCredentials } from "./platformConfig.service.js";
 import otpTemplate from "../emails/templates/otp.template.js";
 import forgotPasswordTemplate from "../emails/templates/forgotPassword.template.js";
 import welcomeTemplate from "../emails/templates/welcome.template.js";
@@ -13,8 +13,10 @@ import invoiceTemplate from "../emails/templates/invoice.template.js";
  * order/payment completion. Failures are logged for admin visibility.
  */
 const sendEmail = async ({ to, subject, html, attachments = [] }) => {
-  if (!env.BREVO_API_KEY) {
-    console.error(`[EmailService] BREVO_API_KEY missing — skipped email "${subject}" to ${to}`);
+  const { apiKey, senderEmail, senderName } = await getEmailCredentials();
+
+  if (!apiKey) {
+    console.error(`[EmailService] No Brevo API key configured — skipped email "${subject}" to ${to}`);
     return false;
   }
 
@@ -22,16 +24,39 @@ const sendEmail = async ({ to, subject, html, attachments = [] }) => {
     const sendSmtpEmail = new brevo.SendSmtpEmail();
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = html;
-    sendSmtpEmail.sender = { name: env.BREVO_SENDER_NAME, email: env.BREVO_SENDER_EMAIL };
+    sendSmtpEmail.sender = { name: senderName, email: senderEmail };
     sendSmtpEmail.to = [{ email: to }];
     if (attachments.length > 0) sendSmtpEmail.attachment = attachments;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    await createBrevoInstance(apiKey).sendTransacEmail(sendSmtpEmail);
     return true;
   } catch (error) {
     console.error(`[EmailService] Failed to send "${subject}" to ${to}: ${error.message}`);
     return false;
   }
+};
+
+// Used by the Super Admin "test email config" endpoint. Unlike sendEmail (which
+// never throws, for fire-and-forget order/payment flows), this surfaces the real
+// Brevo error so the endpoint can report exactly why a test send failed.
+export const sendTestEmail = async (to) => {
+  const { apiKey, senderEmail, senderName } = await getEmailCredentials();
+
+  if (!apiKey) {
+    throw new Error("No Brevo API key is configured (neither in platform settings nor .env)");
+  }
+  if (!senderEmail) {
+    throw new Error("No sender email is configured (neither in platform settings nor .env)");
+  }
+
+  const sendSmtpEmail = new brevo.SendSmtpEmail();
+  sendSmtpEmail.subject = "Test Email - Subaasan Naturals Platform Settings";
+  sendSmtpEmail.htmlContent = "<p>This is a test email confirming your Brevo email configuration is working correctly.</p>";
+  sendSmtpEmail.sender = { name: senderName, email: senderEmail };
+  sendSmtpEmail.to = [{ email: to }];
+
+  await createBrevoInstance(apiKey).sendTransacEmail(sendSmtpEmail);
+  return { senderEmail, senderName };
 };
 
 export const sendOtpEmail = (to, name, otp, purpose) =>

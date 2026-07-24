@@ -11,6 +11,22 @@ const platformSettingsSchema = new mongoose.Schema(
       of: Boolean,
       default: {},
     },
+
+    currency: { type: String, default: "INR" },
+    timezone: { type: String, default: "Asia/Kolkata" },
+    taxPercentage: { type: Number, default: null }, // null = fall back to env.TAX_PERCENTAGE
+    defaultDeliveryCharge: { type: Number, default: null }, // null = fall back to env.DEFAULT_SHIPPING_CHARGE
+
+    payment: {
+      razorpayKeyId: { type: String, default: "" },
+      razorpayKeySecretEncrypted: { type: String, default: "" },
+    },
+
+    email: {
+      brevoApiKeyEncrypted: { type: String, default: "" },
+      senderEmail: { type: String, default: "" },
+      senderName: { type: String, default: "" },
+    },
   },
   { timestamps: true }
 );

@@ -6,6 +6,7 @@ import Blog from "../../models/blog.model.js";
 import { getPagination, buildPaginatedResponse } from "../../helpers/pagination.helper.js";
 import { generateUniqueSlug } from "../../helpers/slugify.helper.js";
 import { uploadImage, deleteImage } from "../../utils/cloudinaryUpload.js";
+import { logActivityFromRequest } from "../../services/activityLog.service.js";
 
 export const getPublicBlogs = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
@@ -68,6 +69,8 @@ export const createBlog = asyncHandler(async (req, res) => {
     publishedDate: status === "published" ? new Date() : null,
   });
 
+  logActivityFromRequest(req, "SuperAdmin", "CREATED_BLOG", { targetType: "Blog", targetId: blog._id }).catch(() => {});
+
   return res.status(HTTP_STATUS.CREATED).json(new ApiResponse(HTTP_STATUS.CREATED, blog, "Blog created"));
 });
 
@@ -97,6 +100,8 @@ export const updateBlog = asyncHandler(async (req, res) => {
 
   await blog.save();
 
+  logActivityFromRequest(req, "SuperAdmin", "UPDATED_BLOG", { targetType: "Blog", targetId: blog._id }).catch(() => {});
+
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, blog, "Blog updated"));
 });
 
@@ -105,6 +110,8 @@ export const deleteBlog = asyncHandler(async (req, res) => {
   if (!blog) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Blog not found");
 
   if (blog.thumbnail?.publicId) deleteImage(blog.thumbnail.publicId).catch(() => {});
+
+  logActivityFromRequest(req, "SuperAdmin", "DELETED_BLOG", { targetType: "Blog", targetId: blog._id }).catch(() => {});
 
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, null, "Blog deleted"));
 });

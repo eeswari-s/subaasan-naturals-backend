@@ -3,6 +3,7 @@ import ApiError from "../../utils/ApiError.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 import HTTP_STATUS from "../../constants/httpStatusCodes.js";
 import Faq from "../../models/faq.model.js";
+import { logActivityFromRequest } from "../../services/activityLog.service.js";
 
 export const getPublicFaqs = asyncHandler(async (req, res) => {
   const filter = { status: "active" };
@@ -20,6 +21,9 @@ export const getAdminFaqs = asyncHandler(async (req, res) => {
 
 export const createFaq = asyncHandler(async (req, res) => {
   const faq = await Faq.create(req.body);
+
+  logActivityFromRequest(req, "SuperAdmin", "CREATED_FAQ", { targetType: "Faq", targetId: faq._id }).catch(() => {});
+
   return res.status(HTTP_STATUS.CREATED).json(new ApiResponse(HTTP_STATUS.CREATED, faq, "FAQ created"));
 });
 
@@ -27,12 +31,16 @@ export const updateFaq = asyncHandler(async (req, res) => {
   const faq = await Faq.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
   if (!faq) throw new ApiError(HTTP_STATUS.NOT_FOUND, "FAQ not found");
 
+  logActivityFromRequest(req, "SuperAdmin", "UPDATED_FAQ", { targetType: "Faq", targetId: faq._id }).catch(() => {});
+
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, faq, "FAQ updated"));
 });
 
 export const deleteFaq = asyncHandler(async (req, res) => {
   const faq = await Faq.findByIdAndDelete(req.params.id);
   if (!faq) throw new ApiError(HTTP_STATUS.NOT_FOUND, "FAQ not found");
+
+  logActivityFromRequest(req, "SuperAdmin", "DELETED_FAQ", { targetType: "Faq", targetId: req.params.id }).catch(() => {});
 
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, null, "FAQ deleted"));
 });

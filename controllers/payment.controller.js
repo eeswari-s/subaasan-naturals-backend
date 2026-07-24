@@ -2,14 +2,14 @@ import asyncHandler from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
 import ApiResponse from "../utils/ApiResponse.js";
 import HTTP_STATUS from "../constants/httpStatusCodes.js";
-import env from "../config/env.js";
 import Order from "../models/order.model.js";
 import Payment from "../models/payment.model.js";
 import User from "../models/user.model.js";
 import { createRazorpayOrder, verifyPaymentSignature, verifyWebhookSignature } from "../services/payment.service.js";
+import { getRazorpayCredentials } from "../services/platformConfig.service.js";
 import { deductStock, appendStatusTimeline, markCouponUsed } from "../services/order.service.js";
 import { sendOrderConfirmationEmail, sendPaymentSuccessEmail } from "../services/email.service.js";
-import { notifyUser } from "../services/notification.service.js";
+import { notifyUser, notifyAllAdmins, notifyAllSuperAdmins } from "../services/notification.service.js";
 import { getPagination, buildPaginatedResponse } from "../helpers/pagination.helper.js";
 import { PAYMENT_STATUS } from "../constants/paymentStatus.js";
 import { ORDER_STATUS } from "../constants/orderStatus.js";
@@ -27,6 +27,7 @@ export const createPaymentOrder = asyncHandler(async (req, res) => {
   }
 
   const razorpayOrder = await createRazorpayOrder(order.grandTotal, order.orderNumber);
+  const { keyId } = await getRazorpayCredentials();
 
   let payment = await Payment.findOne({ order: order._id });
   if (!payment) {
@@ -52,13 +53,43 @@ export const createPaymentOrder = asyncHandler(async (req, res) => {
         razorpayOrderId: razorpayOrder.id,
         amount: razorpayOrder.amount,
         currency: razorpayOrder.currency,
-        keyId: env.RAZORPAY_KEY_ID,
+        keyId,
         orderNumber: order.orderNumber,
       },
       "Payment order created"
     )
   );
 });
+
+const notifyPaymentSuccess = (order, payment) => {
+  notifyAllAdmins({
+    title: "Payment Received",
+    message: `Payment of Rs. ${payment.amount} received for order ${order.orderNumber}.`,
+    type: "payment",
+    link: `/orders/${order._id}`,
+  }).catch(() => {});
+  notifyAllSuperAdmins({
+    title: "Payment Received",
+    message: `Payment of Rs. ${payment.amount} received for order ${order.orderNumber}.`,
+    type: "payment",
+    link: `/orders/${order._id}`,
+  }).catch(() => {});
+};
+
+const notifyPaymentFailure = (order, payment) => {
+  notifyAllAdmins({
+    title: "Payment Failed",
+    message: `Payment of Rs. ${payment.amount} failed for order ${order.orderNumber}.`,
+    type: "payment",
+    link: `/orders/${order._id}`,
+  }).catch(() => {});
+  notifyAllSuperAdmins({
+    title: "Payment Failed",
+    message: `Payment of Rs. ${payment.amount} failed for order ${order.orderNumber}.`,
+    type: "payment",
+    link: `/orders/${order._id}`,
+  }).catch(() => {});
+};
 
 export const verifyPayment = asyncHandler(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
@@ -73,12 +104,13 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     throw new ApiError(HTTP_STATUS.NOT_FOUND, "Payment record not found for this order");
   }
 
-  const isValid = verifyPaymentSignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature });
+  const isValid = await verifyPaymentSignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature });
 
   if (!isValid) {
     payment.status = PAYMENT_STATUS.FAILED;
     payment.failureReason = "Signature verification failed";
     await payment.save();
+    notifyPaymentFailure(order, payment);
     throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Payment verification failed");
   }
 
@@ -103,6 +135,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
       type: "payment",
       link: `/orders/${order._id}`,
     }).catch(() => {});
+    notifyPaymentSuccess(order, payment);
   }
 
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, { order, payment }, "Payment verified successfully"));
@@ -150,6 +183,7 @@ export const razorpayWebhook = asyncHandler(async (req, res) => {
         await deductStock(order.items);
         if (order.coupon) await markCouponUsed(order.coupon, order.customer);
       }
+      if (order) notifyPaymentSuccess(order, payment);
     }
   } else if (payload.event === "payment.failed") {
     payment.status = PAYMENT_STATUS.FAILED;
@@ -160,6 +194,7 @@ export const razorpayWebhook = asyncHandler(async (req, res) => {
       order.paymentStatus = PAYMENT_STATUS.FAILED;
       await order.save();
     }
+    if (order) notifyPaymentFailure(order, payment);
   }
 
   payment.processedWebhookEvents.push(eventId);

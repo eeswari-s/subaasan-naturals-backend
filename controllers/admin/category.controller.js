@@ -6,6 +6,7 @@ import Category from "../../models/category.model.js";
 import { getPagination, buildPaginatedResponse } from "../../helpers/pagination.helper.js";
 import { generateUniqueSlug } from "../../helpers/slugify.helper.js";
 import { uploadImage, deleteImage } from "../../utils/cloudinaryUpload.js";
+import { logActivityFromRequest } from "../../services/activityLog.service.js";
 
 export const getAdminCategories = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
@@ -34,6 +35,8 @@ export const createCategory = asyncHandler(async (req, res) => {
 
   const category = await Category.create({ name, slug, parent: parent || null, description, displayOrder, status, image });
 
+  logActivityFromRequest(req, "Admin", "CREATED_CATEGORY", { targetType: "Category", targetId: category._id }).catch(() => {});
+
   return res.status(HTTP_STATUS.CREATED).json(new ApiResponse(HTTP_STATUS.CREATED, category, "Category created"));
 });
 
@@ -60,6 +63,8 @@ export const updateCategory = asyncHandler(async (req, res) => {
 
   await category.save();
 
+  logActivityFromRequest(req, "Admin", "UPDATED_CATEGORY", { targetType: "Category", targetId: category._id }).catch(() => {});
+
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, category, "Category updated"));
 });
 
@@ -69,6 +74,8 @@ export const deleteCategory = asyncHandler(async (req, res) => {
 
   if (category.image?.publicId) deleteImage(category.image.publicId).catch(() => {});
   await category.deleteOne();
+
+  logActivityFromRequest(req, "Admin", "DELETED_CATEGORY", { targetType: "Category", targetId: req.params.id }).catch(() => {});
 
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, null, "Category deleted"));
 });
