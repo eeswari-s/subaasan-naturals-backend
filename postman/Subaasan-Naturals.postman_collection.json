@@ -1,0 +1,446 @@
+{
+  "info": {
+    "name": "Subaasan Naturals Backend",
+    "description": "End-to-end flow: register/login all 3 roles, catalog, cart, checkout (COD + Razorpay), orders, reviews, admin dashboard. Import the matching environment file and select it before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Customer Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/customer/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Customer\",\n  \"email\": \"{{customerEmail}}\",\n  \"phone\": \"9876543210\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201 or 409 (already registered)', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "  pm.environment.set('customerToken', pm.response.json().data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/customer/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.environment.set('customerToken', pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/admin/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.environment.set('adminToken', pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Super Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/super-admin/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{superAdminEmail}}\",\n  \"password\": \"{{superAdminPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.environment.set('superAdminToken', pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Public / Home",
+      "item": [
+        { "name": "Get Home Data", "request": { "method": "GET", "url": "{{baseUrl}}/home" } },
+        { "name": "Get Categories", "request": { "method": "GET", "url": "{{baseUrl}}/categories" } },
+        { "name": "Get Products (list)", "request": { "method": "GET", "url": "{{baseUrl}}/products?page=1&limit=10" } },
+        { "name": "Get Active Banners", "request": { "method": "GET", "url": "{{baseUrl}}/banners" } },
+        { "name": "Get Active Coupons", "request": { "method": "GET", "url": "{{baseUrl}}/coupons" } },
+        {
+          "name": "Get Product By Slug",
+          "request": { "method": "GET", "url": "{{baseUrl}}/products/{{productSlug}}" }
+        }
+      ]
+    },
+    {
+      "name": "3. Admin - Catalog Setup",
+      "item": [
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/categories",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Category\",\n  \"displayOrder\": 1,\n  \"status\": \"active\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set('categoryId', pm.response.json().data._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Product (multipart, no images)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/admin/products",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Postman Test Groundnut Oil 1L", "type": "text" },
+                { "key": "category", "value": "{{categoryId}}", "type": "text" },
+                { "key": "brand", "value": "Subaasan Naturals", "type": "text" },
+                { "key": "shortDescription", "value": "Pure cold pressed groundnut oil", "type": "text" },
+                { "key": "fullDescription", "value": "100% natural cold pressed groundnut oil, 1L.", "type": "text" },
+                { "key": "mrp", "value": "10", "type": "text" },
+                { "key": "sellingPrice", "value": "10", "type": "text" },
+                { "key": "stock", "value": "50", "type": "text" },
+                { "key": "status", "value": "active", "type": "text" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set('productId', pm.response.json().data._id);",
+                  "pm.environment.set('productSlug', pm.response.json().data.slug);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Admin Products",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/admin/products"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Customer - Cart & Checkout",
+      "item": [
+        {
+          "name": "Add To Cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/cart/items",
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 2\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('status is 200', function () { pm.response.to.have.status(200); });"] }
+            }
+          ]
+        },
+        { "name": "Get Cart", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/cart" } },
+        {
+          "name": "Add Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/addresses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Postman Test Customer\",\n  \"phone\": \"9876543210\",\n  \"addressLine1\": \"12 Test Street\",\n  \"city\": \"Chennai\",\n  \"state\": \"Tamil Nadu\",\n  \"pincode\": \"600001\",\n  \"addressType\": \"home\",\n  \"isDefault\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set('addressId', pm.response.json().data._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Checkout (COD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/checkout",
+            "body": { "mode": "raw", "raw": "{\n  \"addressId\": \"{{addressId}}\",\n  \"paymentMethod\": \"COD\"\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set('orderId', pm.response.json().data._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add To Cart (again, for Razorpay checkout below)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/cart/items",
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('status is 200', function () { pm.response.to.have.status(200); });"] }
+            }
+          ]
+        },
+        {
+          "name": "Checkout (Razorpay) - creates internal order only",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/checkout",
+            "body": { "mode": "raw", "raw": "{\n  \"addressId\": \"{{addressId}}\",\n  \"paymentMethod\": \"razorpay\"\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.environment.set('orderId', pm.response.json().data._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Razorpay Payment Order (LIVE - no charge until paid)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/payments/create-order",
+            "body": { "mode": "raw", "raw": "{\n  \"orderId\": \"{{orderId}}\"\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.environment.set('razorpayOrderId', pm.response.json().data.razorpayOrderId);",
+                  "console.log('Open Razorpay Checkout in your frontend with this razorpayOrderId to actually pay and get a real signature for /payments/verify');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Payment (needs a REAL payment - fill fields manually)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/payments/verify",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"razorpay_order_id\": \"{{razorpayOrderId}}\",\n  \"razorpay_payment_id\": \"PASTE_REAL_PAYMENT_ID\",\n  \"razorpay_signature\": \"PASTE_REAL_SIGNATURE\"\n}"
+            }
+          }
+        },
+        { "name": "Get My Transactions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/payments/transactions" } }
+      ]
+    },
+    {
+      "name": "5. Customer - Orders",
+      "item": [
+        { "name": "Get My Orders", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/orders" } },
+        { "name": "Get Order By Id", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/orders/{{orderId}}" } },
+        { "name": "Download Invoice (PDF)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/orders/{{orderId}}/invoice" } },
+        { "name": "Buy Again", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/orders/{{orderId}}/buy-again" } }
+      ]
+    },
+    {
+      "name": "6. Admin - Orders & Dashboard",
+      "item": [
+        { "name": "Get Admin Orders", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/orders" } },
+        {
+          "name": "Update Order Status -> Packed",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/status",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Packed\"\n}" }
+          }
+        },
+        {
+          "name": "Update Order Status -> Shipped",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/status",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Shipped\"\n}" }
+          }
+        },
+        {
+          "name": "Update Order Status -> Out For Delivery",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/status",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Out For Delivery\"\n}" }
+          }
+        },
+        {
+          "name": "Update Order Status -> Delivered (COD auto-marks paid)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/status",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Delivered\"\n}" }
+          }
+        },
+        { "name": "Get Dashboard Overview", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/dashboard/overview" } },
+        { "name": "Get Revenue Graph", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": "{{baseUrl}}/admin/dashboard/revenue-graph?groupBy=day" } }
+      ]
+    },
+    {
+      "name": "7. Reviews & Notifications",
+      "item": [
+        {
+          "name": "Create Review (needs a DELIVERED order containing the product)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/reviews",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"orderId\": \"{{orderId}}\",\n  \"rating\": 5,\n  \"reviewText\": \"Great quality!\"\n}"
+            }
+          }
+        },
+        { "name": "Get Product Reviews", "request": { "method": "GET", "url": "{{baseUrl}}/reviews/product/{{productId}}" } },
+        { "name": "Get My Notifications", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }], "url": "{{baseUrl}}/notifications" } }
+      ]
+    },
+    {
+      "name": "8. Super Admin",
+      "item": [
+        { "name": "Platform Dashboard Overview", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{superAdminToken}}" }], "url": "{{baseUrl}}/super-admin/dashboard/overview" } },
+        { "name": "Get Public FAQs", "request": { "method": "GET", "url": "{{baseUrl}}/faqs" } },
+        { "name": "Get Public Blogs", "request": { "method": "GET", "url": "{{baseUrl}}/blogs" } }
+      ]
+    }
+  ]
+}
