@@ -24,11 +24,16 @@ const app = express();
 
 app.use(helmet());
 
+// Any localhost/127.0.0.1 origin (any port) is always allowed — it can only ever be
+// reached from the developer's own machine, so this carries no real security risk and
+// keeps local frontend dev working regardless of what CLIENT_URL is set to on the host.
+const isLocalDevOrigin = (origin) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // no origin = same-origin/non-browser requests (curl, Postman, server-to-server)
-      if (!origin || env.CLIENT_URLS.includes(origin)) {
+      if (!origin || isLocalDevOrigin(origin) || env.CLIENT_URLS.includes(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`CORS blocked for origin: ${origin}`));
