@@ -17,6 +17,85 @@ const parseIfJson = (value, fallback) => {
   }
 };
 
+const toBool = (value, fallback = false) => {
+  if (value === undefined) return fallback;
+  if (typeof value === "boolean") return value;
+  return value === "true" || value === "1";
+};
+
+const VARIANT_IMAGE_FIELD_RE = /^variantImages_(\d+)$/;
+
+// upload.any() returns a flat array of files instead of the {fieldname: [...]} shape
+// upload.fields() gives — group them back out by purpose here.
+const groupUploadedFiles = (files = []) => {
+  const thumbnail = files.find((f) => f.fieldname === "thumbnail") || null;
+  const gallery = files.filter((f) => f.fieldname === "gallery");
+
+  const variantImagesByIndex = new Map();
+  files.forEach((f) => {
+    const match = f.fieldname.match(VARIANT_IMAGE_FIELD_RE);
+    if (!match) return;
+    const index = Number(match[1]);
+    if (!variantImagesByIndex.has(index)) variantImagesByIndex.set(index, []);
+    variantImagesByIndex.get(index).push(f);
+  });
+
+  return { thumbnail, gallery, variantImagesByIndex };
+};
+
+/**
+ * Reconciles a stored {url, publicId}[] image list against the URLs the client says it
+ * kept (existingUrlsRaw) plus any newly uploaded files, so edits never silently drop or
+ * re-upload images that already exist on Cloudinary.
+ * existingUrlsRaw undefined => nothing was removed, just append new uploads.
+ */
+const mergeImageList = async (currentImages = [], existingUrlsRaw, newFiles = [], folder) => {
+  const existingUrls = parseIfJson(existingUrlsRaw, null);
+
+  let kept = currentImages;
+  let removedPublicIds = [];
+
+  if (Array.isArray(existingUrls)) {
+    kept = currentImages.filter((img) => existingUrls.includes(img.url));
+    removedPublicIds = currentImages.filter((img) => !existingUrls.includes(img.url)).map((img) => img.publicId);
+  }
+
+  const uploaded = newFiles.length ? await uploadImages(newFiles.map((f) => f.buffer), folder) : [];
+
+  return { images: [...kept, ...uploaded], removedPublicIds };
+};
+
+const buildVariantsForSave = async (rawVariants = [], variantImagesByIndex, currentVariants = []) => {
+  const variants = [];
+
+  for (let i = 0; i < rawVariants.length; i += 1) {
+    const rawVariant = rawVariants[i];
+    const currentVariant = currentVariants[i];
+    const newFiles = variantImagesByIndex.get(i) || [];
+
+    const { images, removedPublicIds } = await mergeImageList(
+      currentVariant?.images || [],
+      rawVariant.existingImageUrls,
+      newFiles,
+      "products/variants"
+    );
+    if (removedPublicIds.length) deleteImages(removedPublicIds).catch(() => {});
+
+    variants.push({
+      variantName: rawVariant.variantName || rawVariant.name,
+      mrp: rawVariant.mrp,
+      sellingPrice: rawVariant.sellingPrice,
+      offerPrice: rawVariant.offerPrice,
+      stock: rawVariant.stock,
+      totalStock: rawVariant.totalStock ?? rawVariant.stock ?? 0,
+      lowStockLimit: rawVariant.lowStockLimit,
+      images,
+    });
+  }
+
+  return variants;
+};
+
 export const getAdminProducts = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const sort = getSort(req.query);
@@ -45,27 +124,24 @@ export const getAdminProductById = asyncHandler(async (req, res) => {
 
 export const createProduct = asyncHandler(async (req, res) => {
   const body = req.body;
+  const { thumbnail: thumbnailFile, gallery: galleryFiles, variantImagesByIndex } = groupUploadedFiles(req.files);
 
   const slug = await generateUniqueSlug(Product, body.name);
 
-  let thumbnail = null;
-  if (req.files?.thumbnail?.[0]) {
-    thumbnail = await uploadImage(req.files.thumbnail[0].buffer, "products");
-  }
+  const thumbnail = thumbnailFile ? await uploadImage(thumbnailFile.buffer, "products") : null;
 
-  let galleryImages = [];
-  if (req.files?.gallery?.length) {
-    galleryImages = await uploadImages(req.files.gallery.map((f) => f.buffer), "products");
-  }
+  const { images: galleryImages } = await mergeImageList([], body.existingGalleryUrls, galleryFiles, "products");
 
-  const variants = parseIfJson(body.variants, []);
+  const rawVariants = parseIfJson(body.variants, []);
+  const variants = await buildVariantsForSave(rawVariants, variantImagesByIndex, []);
+
   const highlights = parseIfJson(body.highlights, []);
   const relatedProducts = parseIfJson(body.relatedProducts, []);
 
   const product = await Product.create({
     name: body.name,
     slug,
-    category: body.category,
+    category: body.categoryId || body.category,
     brand: body.brand,
     shortDescription: body.shortDescription,
     fullDescription: body.fullDescription,
@@ -79,20 +155,20 @@ export const createProduct = asyncHandler(async (req, res) => {
     highlights,
     ingredients: body.ingredients,
     shelfLife: body.shelfLife,
-    storageInstructions: body.storageInstructions,
+    storageInstructions: body.storageInstructions || body.storage,
     manufacturer: body.manufacturer,
     countryOfOrigin: body.countryOfOrigin,
     fssaiNumber: body.fssaiNumber,
     netQuantity: body.netQuantity,
-    couponApplicable: body.couponApplicable,
-    freeShipping: body.freeShipping,
+    couponApplicable: toBool(body.couponApplicable, true),
+    freeShipping: toBool(body.freeShipping, false),
     deliveryCharge: body.deliveryCharge,
     estimatedDeliveryDays: body.estimatedDeliveryDays,
-    isFeatured: body.isFeatured,
-    isBestSeller: body.isBestSeller,
-    isTrending: body.isTrending,
-    isNewArrival: body.isNewArrival,
-    isTodaysDeal: body.isTodaysDeal,
+    isFeatured: toBool(body.isFeatured ?? body.featured),
+    isBestSeller: toBool(body.isBestSeller ?? body.bestSeller),
+    isTrending: toBool(body.isTrending ?? body.trending),
+    isNewArrival: toBool(body.isNewArrival ?? body.newArrival),
+    isTodaysDeal: toBool(body.isTodaysDeal ?? body.todaysDeal),
     relatedProducts,
     displayOrder: body.displayOrder,
     status: body.status,
@@ -106,58 +182,82 @@ export const updateProduct = asyncHandler(async (req, res) => {
   if (!product) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Product not found");
 
   const body = req.body;
+  const { thumbnail: thumbnailFile, gallery: galleryFiles, variantImagesByIndex } = groupUploadedFiles(req.files);
 
   if (body.name && body.name !== product.name) {
     product.slug = await generateUniqueSlug(Product, body.name, product._id);
     product.name = body.name;
   }
 
-  const directFields = [
-    "category",
-    "brand",
-    "shortDescription",
-    "fullDescription",
-    "mrp",
-    "sellingPrice",
-    "offerPrice",
-    "stock",
-    "ingredients",
-    "shelfLife",
-    "storageInstructions",
-    "manufacturer",
-    "countryOfOrigin",
-    "fssaiNumber",
-    "netQuantity",
-    "couponApplicable",
-    "freeShipping",
-    "deliveryCharge",
-    "estimatedDeliveryDays",
-    "isFeatured",
-    "isBestSeller",
-    "isTrending",
-    "isNewArrival",
-    "isTodaysDeal",
-    "displayOrder",
-    "status",
-  ];
-  directFields.forEach((field) => {
-    if (body[field] !== undefined) product[field] = body[field];
+  const category = body.categoryId || body.category;
+  if (category !== undefined) product.category = category;
+
+  const directFieldMap = {
+    brand: "brand",
+    shortDescription: "shortDescription",
+    fullDescription: "fullDescription",
+    mrp: "mrp",
+    sellingPrice: "sellingPrice",
+    offerPrice: "offerPrice",
+    stock: "stock",
+    ingredients: "ingredients",
+    shelfLife: "shelfLife",
+    storage: "storageInstructions",
+    storageInstructions: "storageInstructions",
+    manufacturer: "manufacturer",
+    countryOfOrigin: "countryOfOrigin",
+    fssaiNumber: "fssaiNumber",
+    netQuantity: "netQuantity",
+    deliveryCharge: "deliveryCharge",
+    estimatedDeliveryDays: "estimatedDeliveryDays",
+    displayOrder: "displayOrder",
+    status: "status",
+  };
+  Object.entries(directFieldMap).forEach(([bodyKey, schemaKey]) => {
+    if (body[bodyKey] !== undefined) product[schemaKey] = body[bodyKey];
   });
 
-  if (body.variants !== undefined) product.variants = parseIfJson(body.variants, product.variants);
+  const booleanFieldMap = {
+    couponApplicable: "couponApplicable",
+    freeShipping: "freeShipping",
+    featured: "isFeatured",
+    isFeatured: "isFeatured",
+    bestSeller: "isBestSeller",
+    isBestSeller: "isBestSeller",
+    trending: "isTrending",
+    isTrending: "isTrending",
+    newArrival: "isNewArrival",
+    isNewArrival: "isNewArrival",
+    todaysDeal: "isTodaysDeal",
+    isTodaysDeal: "isTodaysDeal",
+  };
+  Object.entries(booleanFieldMap).forEach(([bodyKey, schemaKey]) => {
+    if (body[bodyKey] !== undefined) product[schemaKey] = toBool(body[bodyKey]);
+  });
+
   if (body.highlights !== undefined) product.highlights = parseIfJson(body.highlights, product.highlights);
   if (body.relatedProducts !== undefined) product.relatedProducts = parseIfJson(body.relatedProducts, product.relatedProducts);
 
-  if (req.files?.thumbnail?.[0]) {
+  if (thumbnailFile) {
     const oldPublicId = product.thumbnail?.publicId;
-    product.thumbnail = await uploadImage(req.files.thumbnail[0].buffer, "products");
+    product.thumbnail = await uploadImage(thumbnailFile.buffer, "products");
     if (oldPublicId) deleteImage(oldPublicId).catch(() => {});
   }
 
-  if (req.files?.gallery?.length) {
-    const oldPublicIds = product.galleryImages.map((img) => img.publicId);
-    product.galleryImages = await uploadImages(req.files.gallery.map((f) => f.buffer), "products");
-    if (oldPublicIds.length) deleteImages(oldPublicIds).catch(() => {});
+  if (body.existingGalleryUrls !== undefined || galleryFiles.length) {
+    const { images, removedPublicIds } = await mergeImageList(
+      product.galleryImages,
+      body.existingGalleryUrls,
+      galleryFiles,
+      "products"
+    );
+    product.galleryImages = images;
+    if (removedPublicIds.length) deleteImages(removedPublicIds).catch(() => {});
+  }
+
+  if (body.variants !== undefined) {
+    const rawVariants = parseIfJson(body.variants, []);
+    product.variants = await buildVariantsForSave(rawVariants, variantImagesByIndex, product.variants);
   }
 
   await product.save();

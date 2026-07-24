@@ -1,3 +1,4 @@
+import multer from "multer";
 import env from "../config/env.js";
 import ApiError from "../utils/ApiError.js";
 import HTTP_STATUS from "../constants/httpStatusCodes.js";
@@ -11,7 +12,10 @@ export const errorHandler = (err, req, res, next) => {
   let error = err;
 
   if (!(error instanceof ApiError)) {
-    const statusCode = error.statusCode || (error.name === "ValidationError" ? HTTP_STATUS.UNPROCESSABLE_ENTITY : HTTP_STATUS.INTERNAL_SERVER_ERROR);
+    const isMulterError = error instanceof multer.MulterError;
+    const statusCode = isMulterError
+      ? HTTP_STATUS.BAD_REQUEST
+      : error.statusCode || (error.name === "ValidationError" ? HTTP_STATUS.UNPROCESSABLE_ENTITY : HTTP_STATUS.INTERNAL_SERVER_ERROR);
     const message = error.message || "Internal Server Error";
     error = new ApiError(statusCode, message, error.errors || [], err.stack);
   }

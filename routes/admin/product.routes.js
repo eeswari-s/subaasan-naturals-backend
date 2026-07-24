@@ -14,10 +14,11 @@ const router = Router();
 
 router.use(adminMiddleware);
 
-const productImageFields = upload.fields([
-  { name: "thumbnail", maxCount: 1 },
-  { name: "gallery", maxCount: 10 },
-]);
+// upload.any() instead of upload.fields([...]): the product form sends a dynamically
+// indexed file field per variant (variantImages_0, variantImages_1, ...), so a static
+// fields() list can never cover every possible variant count. Files are grouped by
+// fieldname in the controller instead.
+const productImageFields = upload.any();
 
 router.get("/", adminProductController.getAdminProducts);
 router.get("/:id", productIdValidator, validateRequest, adminProductController.getAdminProductById);
