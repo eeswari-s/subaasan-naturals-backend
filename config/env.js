@@ -1,10 +1,19 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+// CLIENT_URL may be a single URL or a comma-separated list (e.g. local dev port +
+// deployed frontend). CLIENT_URLS is the full allow-list (used for CORS); CLIENT_URL
+// stays a single canonical URL (the first entry) for building links in emails/shares.
+const clientUrls = (process.env.CLIENT_URL || "http://localhost:3000")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
+
 export default {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: process.env.PORT || 5000,
-  CLIENT_URL: process.env.CLIENT_URL || "http://localhost:3000",
+  CLIENT_URL: clientUrls[0],
+  CLIENT_URLS: clientUrls,
 
   MONGODB_URI: process.env.MONGODB_URI,
 

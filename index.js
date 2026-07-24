@@ -23,9 +23,16 @@ await connectDB();
 const app = express();
 
 app.use(helmet());
+
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: (origin, callback) => {
+      // no origin = same-origin/non-browser requests (curl, Postman, server-to-server)
+      if (!origin || env.CLIENT_URLS.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
   })
 );
