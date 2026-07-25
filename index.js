@@ -18,6 +18,15 @@ import { notFoundHandler, errorHandler } from "./middlewares/error.middleware.js
 import ApiResponse from "./utils/ApiResponse.js";
 import HTTP_STATUS from "./constants/httpStatusCodes.js";
 
+if (!env.CONFIG_ENCRYPTION_KEY_IS_EXPLICIT) {
+  console.warn(
+    "[Boot] CONFIG_ENCRYPTION_KEY is not set — falling back to COOKIE_SECRET to encrypt DB-stored secrets " +
+      "(Razorpay/Brevo config saved via Super Admin). This value MUST be identical across every environment " +
+      "(local, Render, etc.) that reads the same database, or previously-encrypted secrets become undecryptable " +
+      "after a deploy. Set CONFIG_ENCRYPTION_KEY explicitly and keep it consistent everywhere."
+  );
+}
+
 await connectDB();
 
 const app = express();

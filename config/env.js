@@ -36,6 +36,7 @@ export default {
 
   COOKIE_SECRET: process.env.COOKIE_SECRET,
   CONFIG_ENCRYPTION_KEY: process.env.CONFIG_ENCRYPTION_KEY || process.env.COOKIE_SECRET || "dev-only-insecure-fallback-key",
+  CONFIG_ENCRYPTION_KEY_IS_EXPLICIT: Boolean(process.env.CONFIG_ENCRYPTION_KEY),
   SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL,
   SUPER_ADMIN_PASSWORD: process.env.SUPER_ADMIN_PASSWORD,
   SUPER_ADMIN_NAME: process.env.SUPER_ADMIN_NAME || "Super Admin",

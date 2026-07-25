@@ -28,11 +28,20 @@ export const getRazorpayCredentials = async () => {
   const settings = await getSettingsDoc();
 
   if (settings.payment?.razorpayKeyId && settings.payment?.razorpayKeySecretEncrypted) {
-    return {
-      keyId: settings.payment.razorpayKeyId,
-      keySecret: decryptSecret(settings.payment.razorpayKeySecretEncrypted),
-      source: "db",
-    };
+    try {
+      return {
+        keyId: settings.payment.razorpayKeyId,
+        keySecret: decryptSecret(settings.payment.razorpayKeySecretEncrypted),
+        source: "db",
+      };
+    } catch (error) {
+      // A stored secret that fails to decrypt (e.g. CONFIG_ENCRYPTION_KEY changed or
+      // differs between environments) must never take down live payments — fall back
+      // to .env instead of throwing, and log loudly so this gets noticed and fixed.
+      console.error(
+        `[PlatformConfig] Failed to decrypt stored Razorpay key secret (${error.message}) — falling back to env.RAZORPAY_KEY_SECRET. Re-save the Razorpay config in Super Admin settings to fix this permanently.`
+      );
+    }
   }
 
   return { keyId: env.RAZORPAY_KEY_ID, keySecret: env.RAZORPAY_KEY_SECRET, source: "env" };
@@ -51,12 +60,18 @@ export const getEmailCredentials = async () => {
   const settings = await getSettingsDoc();
 
   if (settings.email?.brevoApiKeyEncrypted) {
-    return {
-      apiKey: decryptSecret(settings.email.brevoApiKeyEncrypted),
-      senderEmail: settings.email.senderEmail || env.BREVO_SENDER_EMAIL,
-      senderName: settings.email.senderName || env.BREVO_SENDER_NAME,
-      source: "db",
-    };
+    try {
+      return {
+        apiKey: decryptSecret(settings.email.brevoApiKeyEncrypted),
+        senderEmail: settings.email.senderEmail || env.BREVO_SENDER_EMAIL,
+        senderName: settings.email.senderName || env.BREVO_SENDER_NAME,
+        source: "db",
+      };
+    } catch (error) {
+      console.error(
+        `[PlatformConfig] Failed to decrypt stored Brevo API key (${error.message}) — falling back to env.BREVO_API_KEY. Re-save the email config in Super Admin settings to fix this permanently.`
+      );
+    }
   }
 
   return {
