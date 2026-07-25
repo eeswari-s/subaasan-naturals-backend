@@ -45,7 +45,9 @@ app.use(
       if (!origin || isLocalDevOrigin(origin) || env.CLIENT_URLS.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      const corsError = new Error(`CORS blocked for origin: ${origin}`);
+      corsError.statusCode = HTTP_STATUS.FORBIDDEN;
+      return callback(corsError);
     },
     credentials: true,
   })
