@@ -7,7 +7,7 @@ import Payment from "../../models/payment.model.js";
 import User from "../../models/user.model.js";
 import { getPagination, buildPaginatedResponse } from "../../helpers/pagination.helper.js";
 import { buildDateRangeFilter } from "../../helpers/filter.helper.js";
-import { appendStatusTimeline, restoreStock } from "../../services/order.service.js";
+import { appendStatusTimeline, restoreStock, flattenOrderItemsForStock } from "../../services/order.service.js";
 import { ensureInvoiceNumber, getInvoiceBuffer } from "../../services/invoice.service.js";
 import { notifyUser } from "../../services/notification.service.js";
 import { ORDER_STATUS, RETURN_STATUS, REFUND_STATUS } from "../../constants/orderStatus.js";
@@ -50,7 +50,7 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
   }
 
   if (status === ORDER_STATUS.CANCELLED) {
-    await restoreStock(order.items);
+    await restoreStock(flattenOrderItemsForStock(order.items));
   }
 
   if (status === ORDER_STATUS.DELIVERED && order.paymentMethod === "COD" && order.paymentStatus !== PAYMENT_STATUS.PAID) {
@@ -129,7 +129,7 @@ export const processReturnRequest = asyncHandler(async (req, res) => {
 
   if (action === "approve") {
     await appendStatusTimeline(order, ORDER_STATUS.RETURNED, "Return request approved");
-    await restoreStock(order.items);
+    await restoreStock(flattenOrderItemsForStock(order.items));
   } else {
     await order.save();
   }

@@ -5,6 +5,7 @@ import Banner from "../../models/banner.model.js";
 import Category from "../../models/category.model.js";
 import Product from "../../models/product.model.js";
 import Coupon from "../../models/coupon.model.js";
+import Combo from "../../models/combo.model.js";
 
 const PRODUCT_PREVIEW_FIELDS =
   "name slug thumbnail mrp sellingPrice offerPrice discountPercentage averageRating totalReviews stock";
@@ -12,7 +13,7 @@ const PRODUCT_PREVIEW_FIELDS =
 export const getHomeData = asyncHandler(async (req, res) => {
   const now = new Date();
 
-  const [banners, categories, featuredProducts, trendingProducts, bestSellers, newArrivals, todaysDeals, activeCoupons] =
+  const [banners, categories, featuredProducts, trendingProducts, bestSellers, newArrivals, todaysDeals, activeCoupons, combos] =
     await Promise.all([
       Banner.find({ status: "active" }).sort({ displayOrder: 1 }).limit(4).populate("linkedProduct", "name slug"),
       Category.find({ status: "active" }).sort({ displayOrder: 1 }).limit(12),
@@ -24,12 +25,13 @@ export const getHomeData = asyncHandler(async (req, res) => {
       Coupon.find({ status: "active", startDate: { $lte: now }, endDate: { $gte: now } }).select(
         "code description type value minOrderValue maxDiscount endDate"
       ),
+      Combo.find({ status: "active" }).sort({ displayOrder: 1 }).limit(8).select("name slug thumbnail comboPrice items"),
     ]);
 
   return res.status(HTTP_STATUS.OK).json(
     new ApiResponse(
       HTTP_STATUS.OK,
-      { banners, categories, featuredProducts, trendingProducts, bestSellers, newArrivals, todaysDeals, activeCoupons },
+      { banners, categories, featuredProducts, trendingProducts, bestSellers, newArrivals, todaysDeals, activeCoupons, combos },
       "Home data fetched"
     )
   );

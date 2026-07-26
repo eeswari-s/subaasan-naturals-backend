@@ -5,14 +5,17 @@ import HTTP_STATUS from "../../constants/httpStatusCodes.js";
 import Cart from "../../models/cart.model.js";
 import Address from "../../models/address.model.js";
 import Order from "../../models/order.model.js";
-import Coupon from "../../models/coupon.model.js";
+import Combo from "../../models/combo.model.js";
 import { buildCartResponse } from "./cart.controller.js";
 import { validateStockAvailability, deductStock, appendStatusTimeline, markCouponUsed } from "../../services/order.service.js";
+import { flattenComboItems, buildComboItemsSnapshot, validateComboStock } from "../../services/combo.service.js";
 import generateOrderNumber from "../../utils/generateOrderNumber.js";
 import { sendOrderConfirmationEmail } from "../../services/email.service.js";
 import { notifyUser } from "../../services/notification.service.js";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "../../constants/paymentStatus.js";
 import { ORDER_STATUS } from "../../constants/orderStatus.js";
+
+const COMBO_POPULATE_FIELDS = "name slug thumbnail status variants offerPrice sellingPrice stock";
 
 export const previewCheckout = asyncHandler(async (req, res) => {
   const cart = await Cart.findOne({ user: req.user._id });
@@ -38,21 +41,47 @@ export const createOrder = asyncHandler(async (req, res) => {
     throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Your cart is empty");
   }
 
-  const stockCheckItems = cartData.items.map((i) => ({
-    product: i.product._id,
-    variantName: i.variantName,
-    quantity: i.quantity,
-  }));
+  const comboIds = cartData.items.filter((i) => i.isCombo).map((i) => i.combo._id);
+  const combos = await Combo.find({ _id: { $in: comboIds } }).populate("items.product", COMBO_POPULATE_FIELDS);
+  const comboMap = new Map(combos.map((c) => [c._id.toString(), c]));
+
+  // Flatten combo lines into their constituent products (× combo quantity) so stock
+  // validation/deduction/restore can reuse the exact same product-level logic as
+  // regular items, instead of needing a combo-aware branch inside order.service.js.
+  const stockCheckItems = [];
+  cartData.items.forEach((i) => {
+    if (i.isCombo) {
+      const combo = comboMap.get(i.combo._id.toString());
+      if (!combo) throw new ApiError(HTTP_STATUS.BAD_REQUEST, `"${i.combo.name}" is no longer available`);
+      validateComboStock(combo, i.quantity);
+      stockCheckItems.push(...flattenComboItems(combo.items, i.quantity));
+    } else {
+      stockCheckItems.push({ product: i.product._id, variantName: i.variantName, quantity: i.quantity });
+    }
+  });
   await validateStockAvailability(stockCheckItems);
 
-  const orderItems = cartData.items.map((i) => ({
-    product: i.product._id,
-    variantName: i.variantName,
-    productNameSnapshot: i.product.name,
-    priceSnapshot: i.price,
-    quantity: i.quantity,
-    image: i.image || i.product.thumbnail?.url || "",
-  }));
+  const orderItems = cartData.items.map((i) => {
+    if (i.isCombo) {
+      const combo = comboMap.get(i.combo._id.toString());
+      return {
+        combo: combo._id,
+        comboItems: buildComboItemsSnapshot(combo),
+        productNameSnapshot: combo.name,
+        priceSnapshot: i.price,
+        quantity: i.quantity,
+        image: i.image || combo.thumbnail?.url || "",
+      };
+    }
+    return {
+      product: i.product._id,
+      variantName: i.variantName,
+      productNameSnapshot: i.product.name,
+      priceSnapshot: i.price,
+      quantity: i.quantity,
+      image: i.image || i.product.thumbnail?.url || "",
+    };
+  });
 
   const addressSnapshot = {
     fullName: address.fullName,

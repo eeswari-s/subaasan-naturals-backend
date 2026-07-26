@@ -2,10 +2,27 @@ import mongoose from "mongoose";
 import { ORDER_STATUS, ORDER_STATUS_VALUES, RETURN_STATUS, RETURN_STATUS_VALUES, REFUND_STATUS, REFUND_STATUS_VALUES } from "../constants/orderStatus.js";
 import { PAYMENT_METHOD_VALUES, PAYMENT_STATUS, PAYMENT_STATUS_VALUES } from "../constants/paymentStatus.js";
 
+// A combo line item's constituent products, snapshotted at purchase time (so later
+// edits to the combo or its products never corrupt historical orders).
+const comboItemSnapshotSchema = new mongoose.Schema(
+  {
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+    variantName: { type: String, default: null },
+    productNameSnapshot: { type: String, required: true },
+    quantity: { type: Number, required: true, min: 1 },
+  },
+  { _id: false }
+);
+
+// An order line is either a plain product (product set) or a combo (combo set,
+// comboItems snapshots what was inside it) — priceSnapshot/productNameSnapshot/image
+// apply either way (combo name + combo price, or product name + product price).
 const orderItemSchema = new mongoose.Schema(
   {
-    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null },
     variantName: { type: String, default: null },
+    combo: { type: mongoose.Schema.Types.ObjectId, ref: "Combo", default: null },
+    comboItems: { type: [comboItemSnapshotSchema], default: undefined },
     productNameSnapshot: { type: String, required: true },
     priceSnapshot: { type: Number, required: true },
     quantity: { type: Number, required: true, min: 1 },

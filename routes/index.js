@@ -20,10 +20,12 @@ import categoryRoutes from "./category.routes.js";
 import bannerRoutes from "./banner.routes.js";
 import couponRoutes from "./coupon.routes.js";
 import paymentRoutes from "./payment.routes.js";
+import comboRoutes from "./combo.routes.js";
 
 import adminDashboardRoutes from "./admin/dashboard.routes.js";
 import adminProductRoutes from "./admin/product.routes.js";
 import adminCategoryRoutes from "./admin/category.routes.js";
+import adminComboRoutes from "./admin/combo.routes.js";
 import adminBannerRoutes from "./admin/banner.routes.js";
 import adminCouponRoutes from "./admin/coupon.routes.js";
 import adminOrderRoutes from "./admin/order.routes.js";
@@ -68,11 +70,13 @@ router.use("/categories", categoryRoutes);
 router.use("/banners", bannerRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/payments", paymentRoutes);
+router.use("/combos", comboRoutes);
 
 // Admin
 router.use("/admin/dashboard", adminDashboardRoutes);
 router.use("/admin/products", adminProductRoutes);
 router.use("/admin/categories", adminCategoryRoutes);
+router.use("/admin/combos", adminComboRoutes);
 router.use("/admin/banners", adminBannerRoutes);
 router.use("/admin/coupons", adminCouponRoutes);
 router.use("/admin/orders", adminOrderRoutes);

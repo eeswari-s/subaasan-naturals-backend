@@ -7,7 +7,7 @@ import Payment from "../models/payment.model.js";
 import User from "../models/user.model.js";
 import { createRazorpayOrder, verifyPaymentSignature, verifyWebhookSignature } from "../services/payment.service.js";
 import { getRazorpayCredentials } from "../services/platformConfig.service.js";
-import { deductStock, appendStatusTimeline, markCouponUsed } from "../services/order.service.js";
+import { deductStock, appendStatusTimeline, markCouponUsed, flattenOrderItemsForStock } from "../services/order.service.js";
 import { sendOrderConfirmationEmail, sendPaymentSuccessEmail } from "../services/email.service.js";
 import { notifyUser, notifyAllAdmins, notifyAllSuperAdmins } from "../services/notification.service.js";
 import { getPagination, buildPaginatedResponse } from "../helpers/pagination.helper.js";
@@ -123,7 +123,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     order.paymentStatus = PAYMENT_STATUS.PAID;
     await appendStatusTimeline(order, ORDER_STATUS.CONFIRMED, "Payment received via Razorpay");
 
-    await deductStock(order.items);
+    await deductStock(flattenOrderItemsForStock(order.items));
     if (order.coupon) await markCouponUsed(order.coupon, order.customer);
 
     const user = await User.findById(order.customer);
@@ -180,7 +180,7 @@ export const razorpayWebhook = asyncHandler(async (req, res) => {
       if (order && order.paymentStatus !== PAYMENT_STATUS.PAID) {
         order.paymentStatus = PAYMENT_STATUS.PAID;
         await appendStatusTimeline(order, ORDER_STATUS.CONFIRMED, "Payment captured via Razorpay webhook");
-        await deductStock(order.items);
+        await deductStock(flattenOrderItemsForStock(order.items));
         if (order.coupon) await markCouponUsed(order.coupon, order.customer);
       }
       if (order) notifyPaymentSuccess(order, payment);

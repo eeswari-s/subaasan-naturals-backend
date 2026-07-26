@@ -4,19 +4,17 @@ import ApiResponse from "../../utils/ApiResponse.js";
 import HTTP_STATUS from "../../constants/httpStatusCodes.js";
 import Cart from "../../models/cart.model.js";
 import Product from "../../models/product.model.js";
+import Combo from "../../models/combo.model.js";
 import Coupon from "../../models/coupon.model.js";
 import calculateOrderTotals from "../../utils/calculateOrderTotals.js";
 import { validateAndCalculateCoupon } from "../../services/order.service.js";
-import { incrementCartCount } from "../../services/product.service.js";
+import { incrementCartCount, resolveItemPricing } from "../../services/product.service.js";
+import { getComboAvailability, validateComboStock } from "../../services/combo.service.js";
 import { getCheckoutSettings } from "../../services/platformConfig.service.js";
 
-const resolveItemPricing = (product, variantName) => {
-  if (variantName) {
-    const variant = product.variants.find((v) => v.variantName === variantName);
-    if (!variant) throw new ApiError(HTTP_STATUS.BAD_REQUEST, `Variant "${variantName}" not found`);
-    return { price: variant.offerPrice || variant.sellingPrice, stock: variant.stock, image: variant.images?.[0]?.url };
-  }
-  return { price: product.offerPrice || product.sellingPrice, stock: product.stock, image: product.thumbnail?.url };
+const findCartItemIndex = (cart, { productId, variantName = null, comboId }) => {
+  if (comboId) return cart.items.findIndex((i) => i.combo && i.combo.toString() === comboId);
+  return cart.items.findIndex((i) => i.product && i.product.toString() === productId && i.variantName === variantName);
 };
 
 const buildCartResponse = async (cart) => {
@@ -26,12 +24,36 @@ const buildCartResponse = async (cart) => {
     return { items: [], coupon: null, ...calculateOrderTotals([], null, checkoutSettings) };
   }
 
-  const productIds = cart.items.map((i) => i.product);
-  const products = await Product.find({ _id: { $in: productIds } });
+  const productIds = cart.items.filter((i) => i.product).map((i) => i.product);
+  const comboIds = cart.items.filter((i) => i.combo).map((i) => i.combo);
+
+  const [products, combos] = await Promise.all([
+    Product.find({ _id: { $in: productIds } }),
+    Combo.find({ _id: { $in: comboIds } }).populate("items.product", "name slug thumbnail status variants offerPrice sellingPrice stock"),
+  ]);
   const productMap = new Map(products.map((p) => [p._id.toString(), p]));
+  const comboMap = new Map(combos.map((c) => [c._id.toString(), c]));
 
   const enrichedItems = [];
   for (const item of cart.items) {
+    if (item.combo) {
+      const combo = comboMap.get(item.combo.toString());
+      if (!combo || combo.status !== "active") continue;
+
+      const { availableStock } = getComboAvailability(combo);
+      enrichedItems.push({
+        combo: { _id: combo._id, name: combo.name, slug: combo.slug, thumbnail: combo.thumbnail },
+        isCombo: true,
+        quantity: item.quantity,
+        price: combo.comboPrice,
+        image: combo.thumbnail?.url,
+        availableStock,
+        freeShipping: false,
+        lineTotal: Number((combo.comboPrice * item.quantity).toFixed(2)),
+      });
+      continue;
+    }
+
     const product = productMap.get(item.product.toString());
     if (!product || product.status !== "active") continue;
 
@@ -43,6 +65,7 @@ const buildCartResponse = async (cart) => {
         slug: product.slug,
         thumbnail: product.thumbnail,
       },
+      isCombo: false,
       variantName: item.variantName,
       quantity: item.quantity,
       price: pricing.price,
@@ -74,54 +97,81 @@ export const getCart = asyncHandler(async (req, res) => {
 });
 
 export const addToCart = asyncHandler(async (req, res) => {
-  const { productId, variantName = null, quantity = 1 } = req.body;
+  const { productId, comboId, variantName = null, quantity = 1 } = req.body;
 
-  const product = await Product.findOne({ _id: productId, status: "active" });
-  if (!product) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Product not found");
-
-  const pricing = resolveItemPricing(product, variantName);
-  if (pricing.stock < quantity) {
-    throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Requested quantity exceeds available stock");
+  if (!productId && !comboId) {
+    throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Either productId or comboId is required");
   }
 
   let cart = await Cart.findOne({ user: req.user._id });
   if (!cart) cart = new Cart({ user: req.user._id, items: [] });
 
-  const existingItem = cart.items.find(
-    (i) => i.product.toString() === productId && i.variantName === variantName
-  );
-
   let isNewLine = false;
-  if (existingItem) {
-    existingItem.quantity += quantity;
+
+  if (comboId) {
+    const combo = await Combo.findOne({ _id: comboId, status: "active" }).populate(
+      "items.product",
+      "name slug thumbnail status variants offerPrice sellingPrice stock"
+    );
+    if (!combo) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Combo not found");
+    validateComboStock(combo, quantity);
+
+    const existingIndex = findCartItemIndex(cart, { comboId });
+    if (existingIndex >= 0) {
+      cart.items[existingIndex].quantity += quantity;
+    } else {
+      cart.items.push({ combo: comboId, quantity });
+      isNewLine = true;
+    }
   } else {
-    cart.items.push({ product: productId, variantName, quantity });
-    isNewLine = true;
+    const product = await Product.findOne({ _id: productId, status: "active" });
+    if (!product) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Product not found");
+
+    const pricing = resolveItemPricing(product, variantName);
+    if (pricing.stock < quantity) {
+      throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Requested quantity exceeds available stock");
+    }
+
+    const existingIndex = findCartItemIndex(cart, { productId, variantName });
+    if (existingIndex >= 0) {
+      cart.items[existingIndex].quantity += quantity;
+    } else {
+      cart.items.push({ product: productId, variantName, quantity });
+      isNewLine = true;
+    }
   }
 
   await cart.save();
-  if (isNewLine) incrementCartCount(productId, 1).catch(() => {});
+  if (isNewLine && productId) incrementCartCount(productId, 1).catch(() => {});
 
   const response = await buildCartResponse(cart);
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, response, "Item added to cart"));
 });
 
 export const updateCartItem = asyncHandler(async (req, res) => {
-  const { productId, variantName = null, quantity } = req.body;
+  const { productId, comboId, variantName = null, quantity } = req.body;
 
   const cart = await Cart.findOne({ user: req.user._id });
   if (!cart) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Cart not found");
 
-  const item = cart.items.find((i) => i.product.toString() === productId && i.variantName === variantName);
-  if (!item) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Item not found in cart");
+  const index = findCartItemIndex(cart, { productId, variantName, comboId });
+  if (index < 0) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Item not found in cart");
 
-  const product = await Product.findById(productId);
-  const pricing = resolveItemPricing(product, variantName);
-  if (pricing.stock < quantity) {
-    throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Requested quantity exceeds available stock");
+  if (comboId) {
+    const combo = await Combo.findById(comboId).populate(
+      "items.product",
+      "name slug thumbnail status variants offerPrice sellingPrice stock"
+    );
+    validateComboStock(combo, quantity);
+  } else {
+    const product = await Product.findById(productId);
+    const pricing = resolveItemPricing(product, variantName);
+    if (pricing.stock < quantity) {
+      throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Requested quantity exceeds available stock");
+    }
   }
 
-  item.quantity = quantity;
+  cart.items[index].quantity = quantity;
   await cart.save();
 
   const response = await buildCartResponse(cart);
@@ -129,16 +179,18 @@ export const updateCartItem = asyncHandler(async (req, res) => {
 });
 
 export const removeCartItem = asyncHandler(async (req, res) => {
-  const { productId, variantName = null } = req.body;
+  const { productId, comboId, variantName = null } = req.body;
 
   const cart = await Cart.findOne({ user: req.user._id });
   if (!cart) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Cart not found");
 
-  const existed = cart.items.some((i) => i.product.toString() === productId && i.variantName === variantName);
-  cart.items = cart.items.filter((i) => !(i.product.toString() === productId && i.variantName === variantName));
+  const index = findCartItemIndex(cart, { productId, variantName, comboId });
+  if (index < 0) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Item not found in cart");
+
+  cart.items.splice(index, 1);
   await cart.save();
 
-  if (existed) incrementCartCount(productId, -1).catch(() => {});
+  if (productId) incrementCartCount(productId, -1).catch(() => {});
 
   const response = await buildCartResponse(cart);
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, response, "Item removed from cart"));

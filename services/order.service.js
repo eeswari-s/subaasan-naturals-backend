@@ -94,6 +94,30 @@ export const restoreStock = async (items) => {
   }
 };
 
+// Order items are a mix of plain product lines and combo lines (combo set,
+// comboItems snapshotting what was inside at purchase time). Stock functions only
+// understand flat {product, variantName, quantity} lines, so expand combo lines
+// (comboItems' per-combo-unit quantity × how many combo units were ordered) here —
+// this is the single place every stock-affecting flow (payment success, webhook,
+// cancellation, return) should go through for an already-created order.
+export const flattenOrderItemsForStock = (items) => {
+  const flat = [];
+  items.forEach((item) => {
+    if (item.combo && item.comboItems?.length) {
+      item.comboItems.forEach((comboItem) => {
+        flat.push({
+          product: comboItem.product,
+          variantName: comboItem.variantName,
+          quantity: comboItem.quantity * item.quantity,
+        });
+      });
+    } else if (item.product) {
+      flat.push({ product: item.product, variantName: item.variantName, quantity: item.quantity });
+    }
+  });
+  return flat;
+};
+
 export const appendStatusTimeline = async (order, status, note = "") => {
   order.orderStatus = status;
   order.statusTimeline.push({ status, note, timestamp: new Date() });

@@ -2,6 +2,19 @@ import mongoose from "mongoose";
 import Product from "../models/product.model.js";
 import Review from "../models/review.model.js";
 import Order from "../models/order.model.js";
+import ApiError from "../utils/ApiError.js";
+import HTTP_STATUS from "../constants/httpStatusCodes.js";
+
+// Resolves the live unit price/stock/image for a product, or one of its variants.
+// Shared by cart, checkout, and combo pricing so they can never drift apart.
+export const resolveItemPricing = (product, variantName) => {
+  if (variantName) {
+    const variant = product.variants.find((v) => v.variantName === variantName);
+    if (!variant) throw new ApiError(HTTP_STATUS.BAD_REQUEST, `Variant "${variantName}" not found`);
+    return { price: variant.offerPrice || variant.sellingPrice, stock: variant.stock, image: variant.images?.[0]?.url };
+  }
+  return { price: product.offerPrice || product.sellingPrice, stock: product.stock, image: product.thumbnail?.url };
+};
 
 export const recalculateProductRating = async (productId) => {
   const stats = await Review.aggregate([
