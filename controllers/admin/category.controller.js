@@ -15,7 +15,7 @@ export const getAdminCategories = asyncHandler(async (req, res) => {
   if (req.query.search) filter.name = { $regex: req.query.search, $options: "i" };
 
   const [docs, total] = await Promise.all([
-    Category.find(filter).populate("parent", "name slug").sort({ displayOrder: 1, createdAt: -1 }).skip(skip).limit(limit),
+    Category.find(filter).sort({ displayOrder: 1, createdAt: -1 }).skip(skip).limit(limit),
     Category.countDocuments(filter),
   ]);
 
@@ -25,7 +25,7 @@ export const getAdminCategories = asyncHandler(async (req, res) => {
 });
 
 export const createCategory = asyncHandler(async (req, res) => {
-  const { name, parent, description, displayOrder, status } = req.body;
+  const { name, description, displayOrder, status } = req.body;
 
   const slug = await generateUniqueSlug(Category, name);
   let image = null;
@@ -33,7 +33,7 @@ export const createCategory = asyncHandler(async (req, res) => {
     image = await uploadImage(req.file.buffer, "categories");
   }
 
-  const category = await Category.create({ name, slug, parent: parent || null, description, displayOrder, status, image });
+  const category = await Category.create({ name, slug, description, displayOrder, status, image });
 
   logActivityFromRequest(req, "Admin", "CREATED_CATEGORY", { targetType: "Category", targetId: category._id }).catch(() => {});
 
@@ -44,13 +44,12 @@ export const updateCategory = asyncHandler(async (req, res) => {
   const category = await Category.findById(req.params.id);
   if (!category) throw new ApiError(HTTP_STATUS.NOT_FOUND, "Category not found");
 
-  const { name, parent, description, displayOrder, status } = req.body;
+  const { name, description, displayOrder, status } = req.body;
 
   if (name && name !== category.name) {
     category.slug = await generateUniqueSlug(Category, name, category._id);
     category.name = name;
   }
-  if (parent !== undefined) category.parent = parent || null;
   if (description !== undefined) category.description = description;
   if (displayOrder !== undefined) category.displayOrder = displayOrder;
   if (status !== undefined) category.status = status;

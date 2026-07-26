@@ -15,7 +15,7 @@ export const getHomeData = asyncHandler(async (req, res) => {
   const [banners, categories, featuredProducts, trendingProducts, bestSellers, newArrivals, todaysDeals, activeCoupons] =
     await Promise.all([
       Banner.find({ status: "active" }).sort({ displayOrder: 1 }).limit(4).populate("linkedProduct", "name slug"),
-      Category.find({ status: "active", parent: null }).sort({ displayOrder: 1 }).limit(12),
+      Category.find({ status: "active" }).sort({ displayOrder: 1 }).limit(12),
       Product.find({ status: "active", isFeatured: true }).select(PRODUCT_PREVIEW_FIELDS).limit(12),
       Product.find({ status: "active", isTrending: true }).select(PRODUCT_PREVIEW_FIELDS).limit(12),
       Product.find({ status: "active", isBestSeller: true }).select(PRODUCT_PREVIEW_FIELDS).limit(12),

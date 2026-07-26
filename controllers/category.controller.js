@@ -5,11 +5,7 @@ import HTTP_STATUS from "../constants/httpStatusCodes.js";
 import Category from "../models/category.model.js";
 
 export const getCategories = asyncHandler(async (req, res) => {
-  const filter = { status: "active" };
-  if (req.query.parent === "null") filter.parent = null;
-  else if (req.query.parent) filter.parent = req.query.parent;
-
-  const categories = await Category.find(filter).sort({ displayOrder: 1, createdAt: -1 });
+  const categories = await Category.find({ status: "active" }).sort({ displayOrder: 1, createdAt: -1 });
 
   return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, categories, "Categories fetched"));
 });

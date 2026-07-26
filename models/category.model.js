@@ -8,7 +8,6 @@ const categorySchema = new mongoose.Schema(
       url: { type: String, default: "" },
       publicId: { type: String, default: "" },
     },
-    parent: { type: mongoose.Schema.Types.ObjectId, ref: "Category", default: null },
     description: { type: String, default: "" },
     displayOrder: { type: Number, default: 0 },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
@@ -16,7 +15,7 @@ const categorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-categorySchema.index({ parent: 1, status: 1, displayOrder: 1 });
+categorySchema.index({ status: 1, displayOrder: 1 });
 
 const Category = mongoose.model("Category", categorySchema);
 
