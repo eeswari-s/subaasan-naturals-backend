@@ -19,6 +19,9 @@ export default {
 
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
   JWT_ACCESS_EXPIRY: process.env.JWT_ACCESS_EXPIRY || "15m",
+  // Admin panel convenience: admins stay logged in for a week instead of needing a
+  // silent-refresh flow on the frontend. Customer/Super Admin keep the short-lived default.
+  ADMIN_JWT_ACCESS_EXPIRY: process.env.ADMIN_JWT_ACCESS_EXPIRY || "7d",
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
   JWT_REFRESH_EXPIRY: process.env.JWT_REFRESH_EXPIRY || "7d",
 
