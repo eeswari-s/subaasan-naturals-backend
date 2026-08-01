@@ -18,6 +18,7 @@ router.post("/login", authRateLimiter, loginValidator, validateRequest, customer
 router.post("/refresh", customerAuthController.refresh);
 router.post("/logout", customerAuthController.logout);
 router.post("/forgot-password", authRateLimiter, forgotPasswordValidator, validateRequest, customerAuthController.forgotPassword);
+router.get("/verify-reset-token", authRateLimiter, customerAuthController.verifyResetToken);
 router.post("/reset-password", authRateLimiter, resetPasswordValidator, validateRequest, customerAuthController.resetPassword);
 router.post("/change-password", authMiddleware, changePasswordValidator, validateRequest, customerAuthController.changePassword);
 

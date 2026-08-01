@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import asyncHandler from "../../utils/asyncHandler.js";
 import ApiError from "../../utils/ApiError.js";
 import ApiResponse from "../../utils/ApiResponse.js";
@@ -126,24 +127,52 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   if (!user) {
     return res
       .status(HTTP_STATUS.OK)
-      .json(new ApiResponse(HTTP_STATUS.OK, null, "If an account exists with this email, an OTP has been sent"));
+      .json(new ApiResponse(HTTP_STATUS.OK, null, "If an account exists with this email, a password reset link has been sent"));
   }
 
   const otp = generateOtp();
-  const otpHash = hashToken(otp);
+  const resetToken = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-  await Otp.create({ email, userType: "customer", otpHash, purpose: "password-reset", expiresAt });
+  await Otp.create({
+    email,
+    userType: "customer",
+    otpHash: hashToken(otp),
+    resetTokenHash: hashToken(resetToken),
+    purpose: "password-reset",
+    expiresAt,
+  });
 
-  sendForgotPasswordEmail(user.email, user.name, otp).catch(() => {});
+  const resetUrl = `${env.CLIENT_URL}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+  sendForgotPasswordEmail(user.email, user.name, otp, resetUrl).catch(() => {});
 
   return res
     .status(HTTP_STATUS.OK)
-    .json(new ApiResponse(HTTP_STATUS.OK, null, "If an account exists with this email, an OTP has been sent"));
+    .json(new ApiResponse(HTTP_STATUS.OK, null, "If an account exists with this email, a password reset link has been sent"));
+});
+
+export const verifyResetToken = asyncHandler(async (req, res) => {
+  const { email, token } = req.query;
+
+  const otpRecord = email
+    ? await Otp.findOne({
+        email,
+        userType: "customer",
+        purpose: "password-reset",
+        consumed: false,
+      }).sort({ createdAt: -1 })
+    : null;
+
+  const isValid = Boolean(
+    otpRecord && token && otpRecord.expiresAt >= new Date() && otpRecord.resetTokenHash === hashToken(token)
+  );
+
+  return res.status(HTTP_STATUS.OK).json(new ApiResponse(HTTP_STATUS.OK, { valid: isValid }));
 });
 
 export const resetPassword = asyncHandler(async (req, res) => {
-  const { email, otp, newPassword } = req.body;
+  const { email, otp, token, newPassword } = req.body;
 
   const otpRecord = await Otp.findOne({
     email,
@@ -152,8 +181,13 @@ export const resetPassword = asyncHandler(async (req, res) => {
     consumed: false,
   }).sort({ createdAt: -1 });
 
-  if (!otpRecord || otpRecord.expiresAt < new Date() || otpRecord.otpHash !== hashToken(otp)) {
-    throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Invalid or expired OTP");
+  const isValid =
+    otpRecord &&
+    otpRecord.expiresAt >= new Date() &&
+    ((token && otpRecord.resetTokenHash === hashToken(token)) || (otp && otpRecord.otpHash === hashToken(otp)));
+
+  if (!isValid) {
+    throw new ApiError(HTTP_STATUS.BAD_REQUEST, "Invalid or expired reset link/OTP");
   }
 
   const user = await User.findOne({ email });

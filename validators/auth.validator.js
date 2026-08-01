@@ -18,8 +18,15 @@ export const forgotPasswordValidator = [
 
 export const resetPasswordValidator = [
   body("email").trim().isEmail().withMessage("A valid email is required").normalizeEmail(),
-  body("otp").isLength({ min: 6, max: 6 }).withMessage("OTP must be 6 digits"),
+  body("otp").optional().isLength({ min: 6, max: 6 }).withMessage("OTP must be 6 digits"),
+  body("token").optional().isString().notEmpty().withMessage("Invalid reset token"),
   body("newPassword").isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
+  body().custom((_, { req }) => {
+    if (!req.body.otp && !req.body.token) {
+      throw new Error("Either an OTP or a reset token is required");
+    }
+    return true;
+  }),
 ];
 
 export const changePasswordValidator = [
