@@ -21,6 +21,7 @@ import bannerRoutes from "./banner.routes.js";
 import couponRoutes from "./coupon.routes.js";
 import paymentRoutes from "./payment.routes.js";
 import comboRoutes from "./combo.routes.js";
+import analyticsRoutes from "./analytics.routes.js";
 
 import adminDashboardRoutes from "./admin/dashboard.routes.js";
 import adminProductRoutes from "./admin/product.routes.js";
@@ -44,6 +45,7 @@ import superAdminPaymentRoutes from "./superAdmin/payment.routes.js";
 import superAdminReportsRoutes from "./superAdmin/reports.routes.js";
 import superAdminProfileRoutes from "./superAdmin/profile.routes.js";
 import superAdminActivityLogRoutes from "./superAdmin/activityLog.routes.js";
+import superAdminClientRoutes from "./superAdmin/client.routes.js";
 
 const router = Router();
 
@@ -71,6 +73,7 @@ router.use("/banners", bannerRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/combos", comboRoutes);
+router.use("/clients", analyticsRoutes);
 
 // Admin
 router.use("/admin/dashboard", adminDashboardRoutes);
@@ -96,5 +99,6 @@ router.use("/super-admin/payments", superAdminPaymentRoutes);
 router.use("/super-admin/reports", superAdminReportsRoutes);
 router.use("/super-admin/profile", superAdminProfileRoutes);
 router.use("/super-admin/activity-logs", superAdminActivityLogRoutes);
+router.use("/super-admin/clients", superAdminClientRoutes);
 
 export default router;
