@@ -6,7 +6,7 @@ const bannerSchema = new mongoose.Schema(
       url: { type: String, required: true },
       publicId: { type: String, required: true },
     },
-    title: { type: String, required: true },
+    title: { type: String, default: "" },
     subtitle: { type: String, default: "" },
     linkedProduct: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null },
     displayOrder: { type: Number, default: 0 },
